@@ -11,14 +11,14 @@ public static class PathfindingAlgorithm
     {
         // Most of your solution should be implemented in this method.
 
-        Dictionary<Vector2Int, List<Vector2Int>> graph = BuildGraph(mapData);
+        Dictionary<Vector2Int, List<weightedEdge>> graph = BuildGraph(mapData);
 
         return CalcShortestPath(graph, start, goal);
     }
 
-    static Dictionary<Vector2Int, List<Vector2Int>> BuildGraph(IMapData MD)
+    static Dictionary<Vector2Int, List<weightedEdge>> BuildGraph(IMapData MD)
     {
-        Dictionary<Vector2Int, List<Vector2Int>> graph = new Dictionary<Vector2Int, List<Vector2Int>>();
+        Dictionary<Vector2Int, List<weightedEdge>> graph = new Dictionary<Vector2Int, List<weightedEdge>>();
 
         for (int x = 0; x < MD.Width; x++)
         {
@@ -26,30 +26,35 @@ public static class PathfindingAlgorithm
             {
                 Vector2Int pos = new Vector2Int(x, y);
 
-                graph[pos] = new List<Vector2Int>();
+                graph[pos] = new List<weightedEdge>();
 
-                if (findRNeighbour(MD, pos))
+                float rightCost = findRMovementCost(MD, pos);
+                float leftCost = findLMovementCost(MD, pos);
+                float upCost = findUMovementCost(MD, pos);
+                float downCost = findDMovementCost(MD, pos);
+
+                if (!float.IsPositiveInfinity(rightCost) && rightCost < float.MaxValue)
                 { 
                     Vector2Int rightNeighbour = new Vector2Int(x + 1, y);
-                    graph[pos].Add(rightNeighbour);
+                    graph[pos].Add(new weightedEdge(rightNeighbour, rightCost));
                 }
 
-                if (findLNeighbour(MD, pos))
+                if (!float.IsPositiveInfinity(leftCost) && leftCost < float.MaxValue)
                 {
                     Vector2Int leftNeighbour = new Vector2Int(x - 1, y);
-                    graph[pos].Add(leftNeighbour);
+                    graph[pos].Add(new weightedEdge(leftNeighbour, leftCost));
                 }
 
-                if (findUNeighbour(MD, pos))
+                if (!float.IsPositiveInfinity(upCost) && upCost < float.MaxValue)
                 {
                     Vector2Int upNeighbour = new Vector2Int(x, y + 1);
-                    graph[pos].Add(upNeighbour);
+                    graph[pos].Add(new weightedEdge(upNeighbour, upCost));
                 }
 
-                if (findDNeighbour(MD, pos))
+                if (!float.IsPositiveInfinity(downCost) && downCost < float.MaxValue)
                 {
                     Vector2Int downNeighbour = new Vector2Int(x, y - 1);
-                    graph[pos].Add(downNeighbour);
+                    graph[pos].Add(new weightedEdge(downNeighbour, downCost));
                 }
 
                 //Tidskomplexiteten för att skapa denna graf ska vara O(Höjden * Bredden) eftersom varje position besöks bara en gång
@@ -115,36 +120,49 @@ public static class PathfindingAlgorithm
         return finalPath;
     }
 
-    static bool findRNeighbour(IMapData MD, Vector2Int pos)
+    static float findRMovementCost(IMapData MD, Vector2Int pos)
     {
-        if (pos.x + 1 < MD.Width && !MD.HasVerticalWall(pos.x + 1, pos.y))
-            return true;
+        if (pos.x + 1 >= MD.Width) //Om vi är utanför laborinten
+            return float.PositiveInfinity;
 
-        return false;
+        if (!MD.HasVerticalWall(pos.x + 1, pos.y)) //Om det inte finns en vägg så är det normal cost
+            return 1f;
+
+        return MD.GetVerticalWallCost(pos.x + 1, pos.y); //Om det finns en vägg kollar vi ifall den har en kostnad eller inte går att passera igenom
+        //och då returneras positiva oändligheten
     }
 
-    static bool findLNeighbour(IMapData MD, Vector2Int pos)
+    static float findLMovementCost(IMapData MD, Vector2Int pos)
     {
-        if (pos.x - 1 > -1 && !MD.HasVerticalWall(pos.x, pos.y))
-            return true;
+        if (pos.x - 1 < 0)
+            return float.PositiveInfinity;
 
-        return false;
+        if (!MD.HasVerticalWall(pos.x, pos.y))
+            return 1f;
+
+        return MD.GetVerticalWallCost(pos.x, pos.y);
     }
 
-    static bool findUNeighbour(IMapData MD, Vector2Int pos)
+    static float findUMovementCost(IMapData MD, Vector2Int pos)
     {
-        if (pos.y + 1 < MD.Height && !MD.HasHorizontalWall(pos.x, pos.y + 1))
-            return true;
+        if (pos.y + 1 >= MD.Height)
+            return float.PositiveInfinity;
 
-        return false;
+        if(!MD.HasHorizontalWall(pos.x, pos.y + 1))
+            return 1f;
+
+        return MD.GetHorizontalWallCost(pos.x, pos.y + 1);
     }
 
-    static bool findDNeighbour(IMapData MD, Vector2Int pos)
+    static float findDMovementCost(IMapData MD, Vector2Int pos)
     {
-        if (pos.y - 1 > -1 && !MD.HasHorizontalWall(pos.x, pos.y))
-            return true;
+        if (pos.y - 1 < 0)
+            return float.PositiveInfinity;
 
-        return false;
+        if (!MD.HasHorizontalWall(pos.x, pos.y))
+            return 1f;
+
+        return MD.GetHorizontalWallCost(pos.x, pos.y);
     }
 
     public static bool IsMovementBlocked(Vector2Int from, Vector2Int to, IMapData mapData)
