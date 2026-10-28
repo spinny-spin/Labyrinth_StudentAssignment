@@ -1,12 +1,9 @@
-using NUnit.Framework.Constraints;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
+
 
 public static class PathfindingAlgorithm
 {
-    // TODO: Implement the pathfinding assignment here.
-    // Find the lowest-cost path from start to goal using the map dimensions, wall costs and directed jumps exposed by IMapData.
     public static List<Vector2Int> FindShortestPath(Vector2Int start, Vector2Int goal, IMapData mapData)
     {
         // Most of your solution should be implemented in this method.
@@ -56,51 +53,80 @@ public static class PathfindingAlgorithm
                     Vector2Int downNeighbour = new Vector2Int(x, y - 1);
                     graph[pos].Add(new weightedEdge(downNeighbour, downCost));
                 }
+                //Nu ska vi hitta hopp också!
+                //Lista eftersom IMapData har en funktion som ger oss en lista med hopp beroende på positionen!
+                List<JumpConnection> jumps = MD.GetJumpsFrom(pos);
 
-                //Tidskomplexiteten för att skapa denna graf ska vara O(Höjden * Bredden) eftersom varje position besöks bara en gång
-                //och så länge vi antar att det tar konstant tid att kolla grannarna / väggar
+                //Om vi har hittat ett hopp, lägg in den i närhetslistan
+                foreach (JumpConnection jump in jumps)
+                    graph[pos].Add(new weightedEdge(jump.To, jump.Cost)); //Precis som med grannarna så lägger vi in vart noden är och för vilken kostnad
+                //Ett hopp är enkelriktat
+
+
+                //Tidskomplexiteten för att skapa denna graf ska vara O(Höjden * Bredden + Hopp) eftersom varje position besöks bara en gång men även kollar efter hopp
+                //och så länge vi antar att det tar konstant tid att kolla grannarna / väggar / hopp
             }
         }
 
         return graph;
-        //Detta skapar en graf från mappens data från json filen. Mappens bredd och höjd skapar nycklarna till listorna som positionen håller
-        //Dessa positioner håller en lista med vector2int som symboliserar grannarna
+        //Varje position är en nyckel i grafen och dess värde är en närhetslista med viktade kanter som innehåller grannes position och kostnad
     }
 
-    static List<Vector2Int> CalcShortestPath(Dictionary<Vector2Int, List<Vector2Int>> graph, Vector2Int start, Vector2Int goal)
-    { 
-        Queue<Vector2Int> queue = new Queue<Vector2Int>();
+    static List<Vector2Int> CalcShortestPath(Dictionary<Vector2Int, List<weightedEdge>> graph, Vector2Int start, Vector2Int goal)
+    {
+        Dictionary<Vector2Int, float> distance = new Dictionary<Vector2Int, float>(); //Används för att spara den kortaste distansen vi har hittat ännu till varje nod
+        //Sen fyller vi den med att alla är oändliga, förutom start positionen
 
-        HashSet<Vector2Int> alreadyVisited = new HashSet<Vector2Int>(); //Hashset är perfekt för detta, då det endast tar O(1) tid att kolla ifall ett element finns istället för att loopa igenom en lista
+        foreach (Vector2Int nod in graph.Keys)
+            distance[nod] = float.PositiveInfinity;
 
-        Dictionary<Vector2Int, Vector2Int> cameFromWhere = new Dictionary<Vector2Int, Vector2Int>(); //Även här tar det endast O(1) tid att kolla en nyckels värde !
+        distance[start] = 0.0f;
 
-        queue.Enqueue(start);
-        alreadyVisited.Add(start);
+        Dictionary<Vector2Int, Vector2Int> cameFromWhere = new Dictionary<Vector2Int, Vector2Int>();
+
+        OwnMinHeap queue = new OwnMinHeap();
+
+        queue.Enqueue(start, 0f);
 
         while (queue.Count > 0)
         {
-            Vector2Int currentVector = queue.Dequeue();
+            OwnMinHeap.HeapEntry entry = queue.Dequeue();
 
-            if (currentVector == goal) break;
+            Vector2Int currentVector = entry.node;
 
-            List<Vector2Int> currentNeighbours = graph[currentVector];
+            //Vi hoppar över ifall det finns en gammal entry som har en högre kostnad än en tidigare hittad entry
+            if (entry.priority > distance[currentVector]) continue;
 
-            for(int i = 0; i < currentNeighbours.Count; i++) 
+            if(currentVector == goal) break; //Har vi hittat målet? STOPP!!!!
+
+            List<weightedEdge> currentEdges = graph[currentVector]; //alla edges för nuvarande noden
+
+            // Relax: undersöker om vägen via nuvarande nod
+            // ger en lägre kostnad till grannen.
+            // Om ja: uppdaterar vi kortaste avståndet och previous,
+            // samt lägger till grannen i min-heapen med nya kostnaden.
+            foreach (weightedEdge edge in currentEdges)
             {
-                if (!alreadyVisited.Contains(currentNeighbours[i]))
-                { 
-                    alreadyVisited.Add(currentNeighbours[i]);
-                    queue.Enqueue(currentNeighbours[i]);
-                    cameFromWhere[currentNeighbours[i]] = currentVector;
+                Vector2Int neighbour = edge.toVector;
+
+                float thatDistance = distance[currentVector] + edge.pathCost;
+
+                if(thatDistance < distance[neighbour])
+                {
+                    distance[neighbour] = thatDistance;
+
+                    cameFromWhere[neighbour] = currentVector;
+
+                    queue.Enqueue(neighbour, thatDistance);
                 }
             }
+           
         }
 
         List<Vector2Int> finalPath = new List<Vector2Int>();
         Stack<Vector2Int> stack = new Stack<Vector2Int>();
 
-        if (!alreadyVisited.Contains(goal))
+        if (float.IsPositiveInfinity(distance[goal]))
             return null; // Ingen väg till målet finns (ifall målet är omringad av väggar tex)
         
 
